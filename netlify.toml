@@ -4,6 +4,10 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY están pensadas para ser públicas: Vite las embebe en el JS que
+  # corre en el navegador, y la seguridad la da Row Level Security en la base, no que estén "ocultas". Por eso
+  # aparecen en el bundle y en supabase/seeds/004_functions_url.sql — le decimos al escáner que no son un secreto.
+  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY"
 
 # App de una sola página (react-router): cualquier ruta que no sea un archivo real sirve index.html,
 # para que refrescar /pacientes/123 o abrir /reservar/<slug> directamente no dé 404.
