@@ -1,0 +1,9 @@
+project_id = "stage-nutricion"
+
+[db.seed]
+enabled = true
+sql_paths = ["./seeds/*.sql"]
+
+# La autenticación (JWT de usuario o secreto del webhook) se valida dentro de la función, ruta por ruta.
+[functions.google]
+verify_jwt = false

@@ -1,0 +1,13 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# App de una sola página (react-router): cualquier ruta que no sea un archivo real sirve index.html,
+# para que refrescar /pacientes/123 o abrir /reservar/<slug> directamente no dé 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
