@@ -85,7 +85,7 @@ supabase secrets set GEMINI_API_KEY="$GEMINI_API_KEY"
 supabase functions deploy mealplan --use-api
 ```
 
-`GEMINI_MODEL` es opcional (por defecto `gemini-2.5-flash`). La función corre con `verify_jwt` activo (el valor por
+`GEMINI_MODEL` es opcional (por defecto `gemini-3.6-flash`). La función corre con `verify_jwt` activo (el valor por
 defecto de Supabase): sólo el profesional dueño del paciente puede generarle un plan, porque la consulta a la base se
 hace con su propia sesión, no con permisos de administrador.
 

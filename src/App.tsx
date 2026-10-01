@@ -1,4 +1,4 @@
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router'
 import type { Session } from '@supabase/supabase-js'
 import { AuthGate } from './components/AuthGate'
 import { AppLayout } from './components/AppLayout'

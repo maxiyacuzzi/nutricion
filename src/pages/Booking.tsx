@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router'
 import { book, bookingErrorMessage, getPublicProfessional, listSlots } from '../lib/bookingApi'
 import { refreshBusy } from '../lib/googleApi'
 import { addDays, appointmentLabel, todayIn } from '../lib/time'

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router'
 import {
   createMeasurement, createVisit, deleteMeasurementAndEmptyVisit, getPatient, latestMeasurement, listMeasurements, listVisits,
 } from '../lib/api'
@@ -83,8 +83,16 @@ export function PatientDetail() {
   }, [])
 
   useEffect(() => {
-    if (patientId) loadVisits(patientId).catch(fail)
-  }, [patientId, loadVisits])
+    let cancelled = false
+    if (patientId) {
+      listVisits(patientId).then((vs) => {
+        if (cancelled) return
+        setVisits(vs)
+        setVisitId(vs[0]?.id ?? null)
+      }).catch(fail)
+    }
+    return () => { cancelled = true }
+  }, [patientId])
 
   useEffect(() => {
     let cancelled = false

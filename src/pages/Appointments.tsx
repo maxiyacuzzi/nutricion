@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router'
 import { createProfessional, getMyProfessional, listAppointments, setAppointmentStatus } from '../lib/agendaApi'
 import { addDays, formatDay, localDate, mondayOf, todayIn } from '../lib/time'
 import { AvailabilityEditor } from '../components/AvailabilityEditor'

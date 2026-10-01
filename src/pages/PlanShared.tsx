@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams } from 'react-router'
 import { getSharedPlan } from '../lib/sharedPlanApi'
 import { WEEK_ORDER, WEEKDAYS_LONG, formatDay } from '../lib/time'
 import { MEAL_TYPES } from '../types'

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router'
 import { createPatient } from '../lib/api'
 import { MeasurementFields } from '../components/MeasurementFields'
 import { InsuranceFields } from '../components/InsuranceFields'
