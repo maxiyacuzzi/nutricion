@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams } from 'react-router'
 import { bookingErrorMessage, cancelAppointment, getAppointment } from '../lib/bookingApi'
 import { appointmentLabel } from '../lib/time'
 import { ThemeToggle } from '../components/ThemeToggle'

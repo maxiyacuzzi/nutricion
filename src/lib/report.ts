@@ -31,7 +31,8 @@ export function downloadReport(patient: Patient, visit: Visit, m: Measurement) {
   line('Reporte de composición corporal', 18, true, 10)
   line(patient.full_name, 14, true)
   const age = ageFrom(patient.birth_date)
-  line(`DNI ${patient.dni}  |  Edad: ${age ?? '—'}  |  Altura: ${patient.height_cm} cm`, 10, false, 5)
+  const height = patient.height_cm !== null ? `${patient.height_cm} cm` : '—'
+  line(`DNI ${patient.dni}  |  Edad: ${age ?? '—'}  |  Altura: ${height}`, 10, false, 5)
   line(`Visita: ${new Date(visit.visited_at).toLocaleString('es-AR')}`, 10, false, 10)
 
   const [fLo, fHi] = fatRange(patient.sex)

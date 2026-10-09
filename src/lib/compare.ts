@@ -1,10 +1,24 @@
-import type { Measurement, MeasurementKey } from '../types'
+import type { Measurement, MeasurementValues, Visit } from '../types'
 
-export type CompareMode = 'previous' | 'first'
 export type Trend = 'good' | 'bad' | 'neutral'
 
+/** Lo que se puede comparar de una visita: su peso/cintura (si fue simple) y su composición corporal (si tuvo medición detallada). */
+export interface ComparisonValues extends Omit<MeasurementValues, 'weight_kg'> {
+  weight_kg: number | null
+  waist_umbilical_cm: number | null
+  waist_high_cm: number | null
+}
+
+export type ComparisonKey = keyof ComparisonValues
+
+export interface ComparisonEntry extends ComparisonValues {
+  id: string
+  visit_id: string
+  measured_at: string
+}
+
 export interface MetricSpec {
-  key: MeasurementKey
+  key: ComparisonKey
   label: string
   unit: string
   decimals: number
@@ -12,7 +26,7 @@ export interface MetricSpec {
   good: 'up' | 'down' | null
 }
 
-const m = (key: MeasurementKey, label: string, unit: string, decimals: number, good: MetricSpec['good']): MetricSpec => ({
+const m = (key: ComparisonKey, label: string, unit: string, decimals: number, good: MetricSpec['good']): MetricSpec => ({
   key, label, unit, decimals, good,
 })
 
@@ -27,6 +41,19 @@ export const GENERAL_METRICS: MetricSpec[] = [
   m('bmr_kcal', 'DCI / BMR', 'kcal', 0, null),
   m('metabolic_age', 'Edad metabólica', 'años', 0, 'down'),
 ]
+
+export const WAIST_METRICS: MetricSpec[] = [
+  m('waist_umbilical_cm', 'Cintura umbilical', 'cm', 1, null),
+  m('waist_high_cm', 'Cintura alta', 'cm', 1, null),
+]
+
+/** Composición corporal nula: lo que tiene una visita que sólo registró medición simple. */
+const EMPTY_DETAIL: Omit<MeasurementValues, 'weight_kg'> = {
+  physical_rating: null, bone_mass_kg: null, body_fat_pct: null, body_water_pct: null, muscle_mass_kg: null,
+  visceral_fat: null, total_fat_pct: null, fat_trunk_pct: null, fat_left_arm_pct: null, fat_right_arm_pct: null,
+  fat_left_leg_pct: null, fat_right_leg_pct: null, muscle_trunk_kg: null, muscle_left_arm_kg: null,
+  muscle_right_arm_kg: null, muscle_left_leg_kg: null, muscle_right_leg_kg: null, bmr_kcal: null, metabolic_age: null,
+}
 
 export const FAT_METRICS: MetricSpec[] = [
   m('fat_trunk_pct', 'Tronco', '%', 1, 'down'),
@@ -44,15 +71,37 @@ export const MUSCLE_METRICS: MetricSpec[] = [
   m('muscle_left_leg_kg', 'Pierna izquierda', 'kg', 1, 'up'),
 ]
 
-/** Base contra la que se compara la última medición (`ms` ordenado de la más vieja a la más nueva). */
-export function pickPair(ms: Measurement[], mode: CompareMode): { base: Measurement; current: Measurement } | null {
-  if (ms.length < 2) return null
-  const current = ms[ms.length - 1]
-  return { base: mode === 'previous' ? ms[ms.length - 2] : ms[0], current }
+/** Un punto comparable por visita: su peso/cintura (medición simple) combinado con su composición corporal
+ *  (medición detallada), si la tuvo. Así un paciente que sólo hace mediciones simples también puede comparar. */
+export function buildComparisonEntries(visits: Visit[], measurements: Measurement[]): ComparisonEntry[] {
+  const detailedByVisit = new Map(measurements.map((meas) => [meas.visit_id, meas]))
+  return visits
+    .map((v): ComparisonEntry => {
+      const det = detailedByVisit.get(v.id)
+      return {
+        ...(det ?? EMPTY_DETAIL),
+        id: v.id,
+        visit_id: v.id,
+        measured_at: v.visited_at,
+        weight_kg: det?.weight_kg ?? v.weight_kg,
+        waist_umbilical_cm: v.waist_umbilical_cm,
+        waist_high_cm: v.waist_high_cm,
+      }
+    })
+    .filter((e) => Object.entries(e).some(([k, val]) => !['id', 'visit_id', 'measured_at'].includes(k) && val !== null))
+    .sort((a, b) => a.measured_at.localeCompare(b.measured_at))
+}
+
+/** Par a comparar, ordenado cronológicamente (la más vieja de las dos elegidas queda como base). */
+export function pickPair(entries: ComparisonEntry[], baseId: string, currentId: string): { base: ComparisonEntry; current: ComparisonEntry } | null {
+  if (entries.length < 2) return null
+  const a = entries.find((x) => x.id === baseId) ?? entries[entries.length - 2]
+  const b = entries.find((x) => x.id === currentId) ?? entries[entries.length - 1]
+  return new Date(a.measured_at) <= new Date(b.measured_at) ? { base: a, current: b } : { base: b, current: a }
 }
 
 /** Diferencia redondeada a los decimales del indicador; null si falta alguno de los dos valores. */
-export function delta(spec: MetricSpec, base: Measurement, current: Measurement): number | null {
+export function delta(spec: MetricSpec, base: ComparisonEntry, current: ComparisonEntry): number | null {
   const a = base[spec.key]
   const b = current[spec.key]
   if (a === null || b === null) return null

@@ -69,6 +69,7 @@ export function MealPlanEditor({ patient }: { patient: Patient }) {
   const [plans, setPlans] = useState<MealPlan[] | null>(null)
   const [planId, setPlanId] = useState<string | null>(null)
   const [items, setItems] = useState<Record<string, string> | null>(null)
+  const [creating, setCreating] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [modal, setModal] = useState(false)
   const [sharing, setSharing] = useState(false)
@@ -96,13 +97,17 @@ export function MealPlanEditor({ patient }: { patient: Patient }) {
   const plan = plans?.find((p) => p.id === planId) ?? null
 
   async function newPlan() {
+    if (creating) return
     setError(null)
+    setCreating(true)
     try {
       const p = await createPlan(patientId, `Plan del ${fmtDate(new Date().toISOString())}`)
       setPlans((prev) => [p, ...(prev ?? [])])
       setPlanId(p.id)
     } catch {
       setError('No se pudo crear el plan.')
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -184,7 +189,7 @@ export function MealPlanEditor({ patient }: { patient: Patient }) {
             ))}
           </select>
         </label>
-        <button className="btn" onClick={newPlan}>＋ Plan en blanco</button>
+        <button className="btn" onClick={newPlan} disabled={creating}>{creating ? 'Creando…' : '＋ Plan en blanco'}</button>
         <button className="btn primary" onClick={() => setModal(true)} disabled={generating}>
           {generating ? 'Generando…' : '✨ Generar con IA'}
         </button>

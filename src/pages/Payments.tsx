@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { deletePayment, listPayments } from '../lib/paymentsApi'
 import { addMonths, longMonth, monthStart, todayIn } from '../lib/time'
 import { formatMoney } from '../lib/money'

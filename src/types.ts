@@ -1,5 +1,15 @@
 export type Sex = 'M' | 'F'
 
+/** Una comida de la rutina alimentaria actual del paciente (no es el plan que se le da, es lo que ya come). */
+export interface DietaryRoutineEntry {
+  time: string | null
+  what: string | null
+}
+
+export type DietaryRoutineKey = 'desayuno' | 'almuerzo' | 'merienda' | 'cena' | 'anxiety'
+
+export type DietaryRoutine = Record<DietaryRoutineKey, DietaryRoutineEntry>
+
 export interface Patient {
   id: string
   dni: string
@@ -9,7 +19,8 @@ export interface Patient {
   phone: string | null
   sex: Sex
   birth_date: string | null
-  height_cm: number
+  /** Se completa después del alta: desde "Editar", o solo al cargar la primera visita con talla. */
+  height_cm: number | null
   dietary_restrictions: string | null
   /** Obra social o prepaga (nombre libre, ej. "OSDE"). */
   insurance_provider: string | null
@@ -17,6 +28,11 @@ export interface Patient {
   insurance_plan: string | null
   /** N° de afiliado o credencial. */
   insurance_member_id: string | null
+  reason_for_visit: string | null
+  medication: string | null
+  dietary_routine: DietaryRoutine | null
+  /** Notas generales del alta, sin un campo más específico donde ir. */
+  observations: string | null
 }
 
 export interface Visit {
@@ -24,6 +40,11 @@ export interface Visit {
   patient_id: string
   visited_at: string
   notes: string | null
+  /** Medición simple: lo que se toma en cualquier consulta, independiente de la medición detallada.
+   *  La talla no va acá: se registra una sola vez, al dar de alta al paciente (o editándolo después). */
+  weight_kg: number | null
+  waist_umbilical_cm: number | null
+  waist_high_cm: number | null
 }
 
 /** Campos numéricos de una medición (todos opcionales salvo el peso). */
@@ -65,11 +86,16 @@ export interface PatientInput {
   phone: string | null
   sex: Sex
   birth_date: string | null
-  height_cm: number
+  height_cm: number | null
   dietary_restrictions: string | null
   insurance_provider: string | null
   insurance_plan: string | null
   insurance_member_id: string | null
+  reason_for_visit: string | null
+  medication: string | null
+  dietary_routine: DietaryRoutine | null
+  /** Notas generales del alta, sin un campo más específico donde ir. */
+  observations: string | null
 }
 
 /** Fila de la vista patient_summaries: paciente + resumen de su última medición. */

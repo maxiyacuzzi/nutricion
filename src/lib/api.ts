@@ -52,8 +52,21 @@ export async function listMeasurements(patientId: string): Promise<Measurement[]
   return rows.map(({ visits: _visits, ...m }) => m)
 }
 
-export async function createVisit(patientId: string): Promise<Visit> {
-  return unwrap(await supabase.from('visits').insert({ patient_id: patientId }).select().single())
+export interface SimpleVisitInput {
+  weight_kg: number | null
+  waist_umbilical_cm: number | null
+  waist_high_cm: number | null
+  notes: string | null
+}
+
+/** Crea una visita; `simple` es la medición liviana (peso, talla, cinturas, nota) que puede llevar cualquier visita. */
+export async function createVisit(patientId: string, simple?: SimpleVisitInput): Promise<Visit> {
+  return unwrap(await supabase.from('visits').insert({ patient_id: patientId, ...simple }).select().single())
+}
+
+/** Edita la medición simple de una visita ya creada. */
+export async function updateVisit(id: string, simple: SimpleVisitInput): Promise<Visit> {
+  return unwrap(await supabase.from('visits').update(simple).eq('id', id).select().single())
 }
 
 export async function createMeasurement(visitId: string, values: MeasurementValues): Promise<Measurement> {
@@ -64,32 +77,12 @@ export async function deleteMeasurement(id: string): Promise<void> {
   unwrap(await supabase.from('measurements').delete().eq('id', id))
 }
 
-/**
- * Borra una medición; si la visita a la que pertenecía se queda sin ninguna medición, borra también la visita,
- * para no dejar una entrada vacía en el selector. Devuelve si la visita se borró (para que la UI sepa si tiene
- * que pasar a otra visita o sólo refrescar la actual).
- */
-export async function deleteMeasurementAndEmptyVisit(m: Measurement): Promise<{ visitDeleted: boolean }> {
-  await deleteMeasurement(m.id)
-  const { count, error } = await supabase
-    .from('measurements')
-    .select('*', { count: 'exact', head: true })
-    .eq('visit_id', m.visit_id)
-  if (error) throw new Error(error.message)
-  const visitDeleted = (count ?? 0) === 0
-  if (visitDeleted) unwrap(await supabase.from('visits').delete().eq('id', m.visit_id))
-  return { visitDeleted }
+/** Borra la visita entera (y su medición detallada, si tenía: la base la borra sola en cascada). */
+export async function deleteVisit(id: string): Promise<void> {
+  unwrap(await supabase.from('visits').delete().eq('id', id))
 }
 
-/** Crea paciente + primera visita + primera medición; si algo falla, deshace el paciente (cascade). */
-export async function createPatient(input: PatientInput, values: MeasurementValues): Promise<Patient> {
-  const patient: Patient = unwrap(await supabase.from('patients').insert(input).select().single())
-  try {
-    const visit = await createVisit(patient.id)
-    await createMeasurement(visit.id, values)
-  } catch (e) {
-    await supabase.from('patients').delete().eq('id', patient.id)
-    throw e
-  }
-  return patient
+/** Crea el paciente (sólo identificación; la primera visita/medición se carga después, desde su ficha). */
+export async function createPatient(input: PatientInput): Promise<Patient> {
+  return unwrap(await supabase.from('patients').insert(input).select().single())
 }

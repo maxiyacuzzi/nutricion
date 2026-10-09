@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import type { Appointment, AppointmentStatus } from '../types'
 import { addDays, formatDay, localDate, localTime, longDay, todayIn } from '../lib/time'
 import { firstName, whatsappLink } from '../lib/whatsapp'

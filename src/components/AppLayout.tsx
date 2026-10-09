@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router'
 import { supabase } from '../lib/supabase'
 import { ThemeToggle } from './ThemeToggle'
 
