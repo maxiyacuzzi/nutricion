@@ -30,3 +30,9 @@ supabase/.temp
 
 # PDFs que baja el propio botón "Reporte PDF" / "Plan de alimentación" de la app.
 /*.pdf
+
+# Cypress: artefactos de las corridas y credenciales del usuario de prueba
+cypress/videos
+cypress/screenshots
+cypress/downloads
+cypress.env.json

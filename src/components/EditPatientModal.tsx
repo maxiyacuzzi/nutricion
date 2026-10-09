@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { updatePatient } from '../lib/api'
 import { InsuranceFields } from './InsuranceFields'
+import { DietaryRoutineFields } from './DietaryRoutineFields'
+import { cleanDietaryRoutine, emptyDietaryRoutine } from '../lib/dietaryRoutine'
 import type { Patient, Sex } from '../types'
 
 interface Props {
@@ -9,7 +11,9 @@ interface Props {
   onSaved: (patient: Patient) => void
 }
 
-/** Edición de los datos del paciente (no de sus mediciones): identificación, restricciones y obra social. */
+const numField = (v: number | null) => (v !== null ? String(v) : '')
+
+/** Edición completa de los datos del paciente (lo mismo que el alta, para corregir o completar después). */
 export function EditPatientModal({ patient, onClose, onSaved }: Props) {
   const [dni, setDni] = useState(patient.dni)
   const [fullName, setFullName] = useState(patient.full_name)
@@ -17,8 +21,12 @@ export function EditPatientModal({ patient, onClose, onSaved }: Props) {
   const [phone, setPhone] = useState(patient.phone ?? '')
   const [sex, setSex] = useState<Sex>(patient.sex)
   const [birthDate, setBirthDate] = useState(patient.birth_date ?? '')
-  const [height, setHeight] = useState(String(patient.height_cm))
+  const [height, setHeight] = useState(numField(patient.height_cm))
+  const [reason, setReason] = useState(patient.reason_for_visit ?? '')
+  const [medication, setMedication] = useState(patient.medication ?? '')
   const [restrictions, setRestrictions] = useState(patient.dietary_restrictions ?? '')
+  const [routine, setRoutine] = useState(patient.dietary_routine ?? emptyDietaryRoutine())
+  const [observations, setObservations] = useState(patient.observations ?? '')
   const [insuranceProvider, setInsuranceProvider] = useState(patient.insurance_provider ?? '')
   const [insurancePlan, setInsurancePlan] = useState(patient.insurance_plan ?? '')
   const [insuranceMemberId, setInsuranceMemberId] = useState(patient.insurance_member_id ?? '')
@@ -28,8 +36,10 @@ export function EditPatientModal({ patient, onClose, onSaved }: Props) {
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    const heightCm = Number(height.replace(',', '.'))
-    if (!Number.isFinite(heightCm) || heightCm <= 0) return setError('Altura inválida')
+    const text = height.trim().replace(',', '.')
+    const heightCm = text === '' ? null : Number(text)
+    if (heightCm !== null && (!Number.isFinite(heightCm) || heightCm <= 0)) return setError('Altura inválida')
+
     setBusy(true)
     try {
       const saved = await updatePatient(patient.id, {
@@ -44,6 +54,10 @@ export function EditPatientModal({ patient, onClose, onSaved }: Props) {
         insurance_provider: insuranceProvider.trim() || null,
         insurance_plan: insurancePlan.trim() || null,
         insurance_member_id: insuranceMemberId.trim() || null,
+        reason_for_visit: reason.trim() || null,
+        medication: medication.trim() || null,
+        dietary_routine: cleanDietaryRoutine(routine),
+        observations: observations.trim() || null,
       })
       onSaved(saved)
     } catch (err) {
@@ -82,10 +96,25 @@ export function EditPatientModal({ patient, onClose, onSaved }: Props) {
             <label>Fecha de nacimiento
               <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
             </label>
-            <label>Altura (cm) *
-              <input required inputMode="decimal" value={height} onChange={(e) => setHeight(e.target.value)} />
+            <label>Altura (cm)
+              <input inputMode="decimal" placeholder="Ej: 175" value={height} onChange={(e) => setHeight(e.target.value)} />
             </label>
           </div>
+        </fieldset>
+
+        <fieldset className="card">
+          <legend>Consulta</legend>
+          <div className="grid g2">
+            <label>Motivo de la consulta
+              <input value={reason} onChange={(e) => setReason(e.target.value)} />
+            </label>
+            <label>Medicación o suplementos
+              <input value={medication} onChange={(e) => setMedication(e.target.value)} />
+            </label>
+          </div>
+          <label>Alergias o intolerancias
+            <input value={restrictions} onChange={(e) => setRestrictions(e.target.value)} />
+          </label>
         </fieldset>
 
         <InsuranceFields
@@ -93,10 +122,12 @@ export function EditPatientModal({ patient, onClose, onSaved }: Props) {
           onProvider={setInsuranceProvider} onPlan={setInsurancePlan} onMemberId={setInsuranceMemberId}
         />
 
+        <DietaryRoutineFields value={routine} onChange={setRoutine} />
+
         <fieldset className="card">
-          <legend>Restricciones alimenticias</legend>
-          <label>Alimentos que no puede consumir
-            <input value={restrictions} onChange={(e) => setRestrictions(e.target.value)} />
+          <legend>Observaciones</legend>
+          <label>Notas generales
+            <textarea rows={3} value={observations} onChange={(e) => setObservations(e.target.value)} />
           </label>
         </fieldset>
 

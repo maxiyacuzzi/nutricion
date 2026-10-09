@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import {
-  createMeasurement, createVisit, deleteMeasurementAndEmptyVisit, getPatient, latestMeasurement, listMeasurements, listVisits,
+  createMeasurement, createVisit, deleteVisit, getPatient, latestMeasurement, listMeasurements, listVisits, updateVisit,
 } from '../lib/api'
+import type { SimpleVisitInput } from '../lib/api'
 import { ageFrom, classify, gauges, ratingLevel, type GaugeSpec } from '../lib/ranges'
 import { whatsappLink, firstName } from '../lib/whatsapp'
 import { Gauge } from '../components/Gauge'
@@ -11,9 +12,11 @@ import { SegmentCard } from '../components/SegmentCard'
 import { Comparison } from '../components/Comparison'
 import { PatientEvolution } from '../components/PatientEvolution'
 import { PatientNotes } from '../components/PatientNotes'
+import { addNote } from '../lib/notesApi'
 import { MealPlanEditor } from '../components/MealPlanEditor'
 import { PatientPayments } from '../components/PatientPayments'
 import { EditPatientModal } from '../components/EditPatientModal'
+import { SimpleVisitModal } from '../components/SimpleVisitModal'
 import { segmentsOf } from '../lib/segments'
 import { MeasurementFields } from '../components/MeasurementFields'
 import { emptyMeasurementForm, parseMeasurementForm } from '../lib/measurementForm'
@@ -52,6 +55,42 @@ function RatingPanel({ rating }: { rating: number | null }) {
   )
 }
 
+/** Lo que se ve cuando la visita elegida todavía no tiene medición detallada: sólo lo liviano que ya tiene. */
+function SimpleVisitCard({ visit, onEdit, onAddDetailed }: { visit: Visit; onEdit: () => void; onAddDetailed: () => void }) {
+  return (
+    <div className="card simple-visit">
+      <div className="simple-visit-head">
+        <h3>Visita del {fmtDateTime(visit.visited_at)}</h3>
+        <button className="btn small" onClick={onEdit}>✎ Editar</button>
+      </div>
+      <div className="grid g3">
+        <div className="stat-block">
+          <small className="muted">Peso</small>
+          <strong>{visit.weight_kg ?? '—'} {visit.weight_kg !== null && <small>kg</small>}</strong>
+        </div>
+        <div className="stat-block">
+          <small className="muted">Cintura umbilical</small>
+          <strong>{visit.waist_umbilical_cm ?? '—'} {visit.waist_umbilical_cm !== null && <small>cm</small>}</strong>
+        </div>
+        <div className="stat-block">
+          <small className="muted">Cintura alta</small>
+          <strong>{visit.waist_high_cm ?? '—'} {visit.waist_high_cm !== null && <small>cm</small>}</strong>
+        </div>
+      </div>
+      {visit.notes && (
+        <div>
+          <small className="muted">Notas</small>
+          <p className="note-body">{visit.notes}</p>
+        </div>
+      )}
+      <p className="muted small">Esta visita todavía no tiene la medición detallada (composición corporal completa).</p>
+      <div className="actions" style={{ justifyContent: 'flex-start' }}>
+        <button className="btn primary" onClick={onAddDetailed}>＋ Agregar medición detallada</button>
+      </div>
+    </div>
+  )
+}
+
 export function PatientDetail() {
   const { id: patientId } = useParams<{ id: string }>()
   // undefined = cargando, null = no existe (o no es tuyo).
@@ -60,7 +99,10 @@ export function PatientDetail() {
   const [visitId, setVisitId] = useState<string | null>(null)
   const [measurement, setMeasurement] = useState<Measurement | null>(null)
   const [hot, setHot] = useState<SegmentId | null>(null)
-  const [modal, setModal] = useState(false)
+  // Modal de medición detallada: 'new' crea una visita nueva, 'current' la agrega a la visita elegida.
+  const [measurementTarget, setMeasurementTarget] = useState<'new' | 'current' | null>(null)
+  // Modal de visita simple: true = nueva, un Visit = editar esa visita.
+  const [simpleModal, setSimpleModal] = useState<true | Visit | null>(null)
   const [editing, setEditing] = useState(false)
   const [view, setView] = useState<'measurement' | 'compare' | 'evolution' | 'notes' | 'plan' | 'payments'>('measurement')
   const [all, setAll] = useState<Measurement[] | null>(null)
@@ -83,16 +125,8 @@ export function PatientDetail() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    if (patientId) {
-      listVisits(patientId).then((vs) => {
-        if (cancelled) return
-        setVisits(vs)
-        setVisitId(vs[0]?.id ?? null)
-      }).catch(fail)
-    }
-    return () => { cancelled = true }
-  }, [patientId])
+    if (patientId) loadVisits(patientId).catch(fail)
+  }, [patientId, loadVisits])
 
   useEffect(() => {
     let cancelled = false
@@ -124,30 +158,42 @@ export function PatientDetail() {
   const m = measurement && measurement.visit_id === visit?.id ? measurement : null
   const age = patient ? ageFrom(patient.birth_date) : null
 
-  async function removeMeasurement() {
-    if (!patient || !visit || !m) return
-    if (!window.confirm('¿Borrar esta medición? No se puede deshacer.')) return
+  async function removeVisit() {
+    if (!patient || !visit) return
+    if (!window.confirm('¿Borrar esta visita? Se borra también su medición detallada, si tenía. No se puede deshacer.')) return
     try {
-      const { visitDeleted } = await deleteMeasurementAndEmptyVisit(m)
-      setAll((prev) => (prev ? prev.filter((x) => x.id !== m.id) : prev))
-      if (visitDeleted) {
-        await loadVisits(patient.id) // pasa a la visita más reciente que quede
-      } else {
-        setMeasurement(await latestMeasurement(visit.id))
-      }
+      await deleteVisit(visit.id)
+      if (m) setAll((prev) => (prev ? prev.filter((x) => x.id !== m.id) : prev))
+      await loadVisits(patient.id)
     } catch (e) { fail(e) }
   }
+
+  async function saveSimpleVisit(input: SimpleVisitInput) {
+    if (!patient) return
+    if (simpleModal && simpleModal !== true) {
+      const saved = await updateVisit(simpleModal.id, input)
+      setVisits((prev) => prev.map((v) => (v.id === saved.id ? saved : v)))
+    } else {
+      const v = await createVisit(patient.id, input)
+      setVisits((prev) => [v, ...prev])
+      setVisitId(v.id)
+      if (input.notes) await addNote(patient.id, `Visita: ${input.notes}`)
+    }
+    setSimpleModal(null)
+  }
+
+  const latestVisit = patientVisits[0] ?? null
 
   return (
     <div className="dash">
       <Link to="/pacientes" className="back">← Pacientes</Link>
       <header className="top">
         <div>
-          <small className="live">Última medición: {m ? fmtDateTime(m.measured_at) : '—'}</small>
+          <small className="live">Última visita: {latestVisit ? fmtDateTime(latestVisit.visited_at) : '—'}</small>
           <h1>{patient?.full_name ?? '…'}</h1>
           {patient && (
             <>
-              <small className="muted">DNI: {patient.dni} | Edad: {age ?? '—'} | Altura: {patient.height_cm} cm</small>
+              <small className="muted">DNI: {patient.dni} | Edad: {age ?? '—'} | Altura: {patient.height_cm ?? '—'}{patient.height_cm !== null ? ' cm' : ''}</small>
               <br />
               <small className="muted">
                 {patient.insurance_provider
@@ -199,9 +245,9 @@ export function PatientDetail() {
       </div>
 
       {view === 'compare' ? (
-        patient && all && <Comparison measurements={all} sex={patient.sex} />
+        patient && all && <Comparison key={patient.id} measurements={all} visits={patientVisits} sex={patient.sex} />
       ) : view === 'evolution' ? (
-        all && <PatientEvolution measurements={all} />
+        all && <PatientEvolution measurements={all} visits={patientVisits} />
       ) : view === 'notes' ? (
         patient && <PatientNotes patientId={patient.id} />
       ) : view === 'plan' ? (
@@ -213,13 +259,22 @@ export function PatientDetail() {
       <div className="toolbar">
         <label>Visita
           <select value={visitId ?? ''} onChange={(e) => setVisitId(e.target.value)}>
-            {patientVisits.map((v) => <option key={v.id} value={v.id}>{fmtDateTime(v.visited_at)}</option>)}
+            {patientVisits.map((v) => (
+              <option key={v.id} value={v.id}>
+                {fmtDateTime(v.visited_at)}{v.weight_kg !== null ? ` — ${v.weight_kg} kg` : ''}
+              </option>
+            ))}
           </select>
         </label>
-        <button className="btn primary" onClick={() => setModal(true)} disabled={!patient}>＋ Nueva medición</button>
-        <button className="btn danger" onClick={removeMeasurement} disabled={!m}>🗑 Borrar medición</button>
+        <button className="btn primary" onClick={() => setSimpleModal(true)} disabled={!patient}>＋ Nueva visita</button>
+        <button className="btn" onClick={() => setMeasurementTarget('new')} disabled={!patient}>＋ Medición detallada</button>
+        <button className="btn danger" onClick={removeVisit} disabled={!visit}>🗑 Borrar visita</button>
       </div>
 
+      {visit && !m ? (
+        <SimpleVisitCard visit={visit} onEdit={() => setSimpleModal(visit)} onAddDetailed={() => setMeasurementTarget('current')} />
+      ) : (
+        <>
       <div className="row5">
         <RatingPanel rating={m?.physical_rating ?? null} />
         <GaugePanel title="% Grasa corporal" spec={g.fat} value={m?.body_fat_pct ?? null} />
@@ -256,19 +311,36 @@ export function PatientDetail() {
       </div>
         </>
       )}
+        </>
+      )}
 
-      {modal && patient && (
+      {simpleModal && patient && (
+        <SimpleVisitModal
+          initial={simpleModal === true ? undefined : simpleModal}
+          onClose={() => setSimpleModal(null)}
+          onSave={saveSimpleVisit}
+        />
+      )}
+
+      {measurementTarget && patient && (
         <MeasurementModal
-          onClose={() => setModal(false)}
-          onSave={async (values) => {
-            // Cada medición nueva abre su propia visita (con la fecha/hora de hoy); no hace falta crearla aparte.
-            const v = await createVisit(patient.id)
-            const saved = await createMeasurement(v.id, values)
-            setVisits((prev) => [v, ...prev])
-            setVisitId(v.id)
-            setMeasurement(saved)
-            setAll((prev) => (prev ? [...prev, saved] : prev))
-            setModal(false)
+          onClose={() => setMeasurementTarget(null)}
+          onSave={async (values, notes) => {
+            if (measurementTarget === 'current' && visit) {
+              const saved = await createMeasurement(visit.id, values)
+              setMeasurement(saved)
+              setAll((prev) => (prev ? [...prev, saved] : prev))
+            } else {
+              // Medición detallada sin visita elegida (o explícitamente "nueva"): abre su propia visita.
+              const v = await createVisit(patient.id)
+              const saved = await createMeasurement(v.id, values)
+              setVisits((prev) => [v, ...prev])
+              setVisitId(v.id)
+              setMeasurement(saved)
+              setAll((prev) => (prev ? [...prev, saved] : prev))
+            }
+            if (notes) await addNote(patient.id, `Medición detallada: ${notes}`)
+            setMeasurementTarget(null)
           }}
         />
       )}
@@ -278,9 +350,10 @@ export function PatientDetail() {
 
 function MeasurementModal({ onClose, onSave }: {
   onClose: () => void
-  onSave: (values: ReturnType<typeof parseMeasurementForm>) => Promise<void>
+  onSave: (values: ReturnType<typeof parseMeasurementForm>, notes: string | null) => Promise<void>
 }) {
   const [form, setForm] = useState(emptyMeasurementForm)
+  const [notes, setNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -289,7 +362,7 @@ function MeasurementModal({ onClose, onSave }: {
     setBusy(true)
     setError(null)
     try {
-      await onSave(parseMeasurementForm(form))
+      await onSave(parseMeasurementForm(form), notes.trim() || null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar')
       setBusy(false)
@@ -299,8 +372,15 @@ function MeasurementModal({ onClose, onSave }: {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <form className="modal form" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <h2>Nueva medición</h2>
+        <h2>Medición detallada</h2>
         <MeasurementFields form={form} onChange={(k, v) => setForm((s) => ({ ...s, [k]: v }))} />
+        <fieldset className="card">
+          <legend>Notas</legend>
+          <label>Notas de esta medición <span className="tag">opcional</span>
+            <textarea rows={3} placeholder="Ej: buena adherencia al plan, refiere menos hambre…"
+              value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </label>
+        </fieldset>
         {error && <p className="error">{error}</p>}
         <div className="actions">
           <button type="button" className="btn" onClick={onClose}>Cancelar</button>

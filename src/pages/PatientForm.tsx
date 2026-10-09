@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { createPatient } from '../lib/api'
-import { MeasurementFields } from '../components/MeasurementFields'
+import { addNote } from '../lib/notesApi'
 import { InsuranceFields } from '../components/InsuranceFields'
-import { emptyMeasurementForm, parseMeasurementForm } from '../lib/measurementForm'
-import type { Sex } from '../types'
+import { DietaryRoutineFields } from '../components/DietaryRoutineFields'
+import { cleanDietaryRoutine, emptyDietaryRoutine } from '../lib/dietaryRoutine'
+import type { DietaryRoutine, Sex } from '../types'
 
 export function PatientForm() {
   const navigate = useNavigate()
@@ -15,38 +16,48 @@ export function PatientForm() {
   const [sex, setSex] = useState<Sex>('M')
   const [birthDate, setBirthDate] = useState('')
   const [height, setHeight] = useState('')
-  const [restrictions, setRestrictions] = useState('')
   const [insuranceProvider, setInsuranceProvider] = useState('')
   const [insurancePlan, setInsurancePlan] = useState('')
   const [insuranceMemberId, setInsuranceMemberId] = useState('')
-  const [measurement, setMeasurement] = useState(emptyMeasurementForm)
+  const [reason, setReason] = useState('')
+  const [medication, setMedication] = useState('')
+  const [restrictions, setRestrictions] = useState('')
+  const [routine, setRoutine] = useState<DietaryRoutine>(emptyDietaryRoutine)
+  const [observations, setObservations] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    const text = height.trim().replace(',', '.')
+    const heightCm = text === '' ? null : Number(text)
+    if (heightCm !== null && (!Number.isFinite(heightCm) || heightCm <= 0)) return setError('Altura inválida')
     setBusy(true)
     try {
-      const values = parseMeasurementForm(measurement)
-      const heightCm = Number(height.replace(',', '.'))
-      if (!Number.isFinite(heightCm) || heightCm <= 0) throw new Error('Altura inválida')
-      const patient = await createPatient(
-        {
-          dni: dni.trim(),
-          full_name: fullName.trim(),
-          email: email.trim() || null,
-          phone: phone.trim() || null,
-          sex,
-          birth_date: birthDate || null,
-          height_cm: heightCm,
-          dietary_restrictions: restrictions.trim() || null,
-          insurance_provider: insuranceProvider.trim() || null,
-          insurance_plan: insurancePlan.trim() || null,
-          insurance_member_id: insuranceMemberId.trim() || null,
-        },
-        values,
-      )
+      const patient = await createPatient({
+        dni: dni.trim(),
+        full_name: fullName.trim(),
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        sex,
+        birth_date: birthDate || null,
+        height_cm: heightCm,
+        dietary_restrictions: restrictions.trim() || null,
+        insurance_provider: insuranceProvider.trim() || null,
+        insurance_plan: insurancePlan.trim() || null,
+        insurance_member_id: insuranceMemberId.trim() || null,
+        reason_for_visit: reason.trim() || null,
+        medication: medication.trim() || null,
+        dietary_routine: cleanDietaryRoutine(routine),
+        observations: observations.trim() || null,
+      })
+      const intake = [
+        reason.trim() && `Motivo de la consulta: ${reason.trim()}`,
+        medication.trim() && `Medicación o suplementos: ${medication.trim()}`,
+        restrictions.trim() && `Restricciones: ${restrictions.trim()}`,
+      ].filter(Boolean)
+      if (intake.length > 0) await addNote(patient.id, `Registro del paciente:\n${intake.join('\n')}`)
       navigate(`/pacientes/${patient.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar')
@@ -59,8 +70,8 @@ export function PatientForm() {
     <form className="page form" onSubmit={submit}>
       <h2>📝 Registro de Paciente</h2>
       <p className="muted">
-        DNI, Nombre, Sexo, Altura y Peso son <b>obligatorios</b>. Los demás campos son opcionales. Se crea
-        automáticamente la primera visita y medición.
+        DNI, Nombre y Sexo son <b>obligatorios</b>. Los demás campos son opcionales. Las mediciones se cargan
+        después, desde la ficha del paciente.
       </p>
 
       <fieldset className="card">
@@ -87,13 +98,11 @@ export function PatientForm() {
           <label>Fecha de nacimiento <span className="tag">edad auto-calculada</span>
             <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
           </label>
-          <label>Altura (cm) *
-            <input required inputMode="decimal" placeholder="Ej: 175" value={height} onChange={(e) => setHeight(e.target.value)} />
+          <label>Altura (cm) <span className="tag">opcional</span>
+            <input inputMode="decimal" placeholder="Ej: 175" value={height} onChange={(e) => setHeight(e.target.value)} />
           </label>
         </div>
       </fieldset>
-
-      <MeasurementFields form={measurement} onChange={(k, v) => setMeasurement((s) => ({ ...s, [k]: v }))} />
 
       <InsuranceFields
         provider={insuranceProvider} plan={insurancePlan} memberId={insuranceMemberId}
@@ -101,12 +110,30 @@ export function PatientForm() {
       />
 
       <fieldset className="card">
-        <legend>Restricciones alimenticias</legend>
-        <label>Alimentos que no puede consumir (celiaco, intolerante lactosa, sin mariscos, etc.)
+        <legend>Consulta</legend>
+        <div className="grid g2">
+          <label>Motivo de la consulta
+            <input placeholder="Ej: quiere bajar de peso antes del verano" value={reason} onChange={(e) => setReason(e.target.value)} />
+          </label>
+          <label>Medicación o suplementos <span className="tag">opcional</span>
+            <input placeholder="Ej: levotiroxina, omega 3…" value={medication} onChange={(e) => setMedication(e.target.value)} />
+          </label>
+        </div>
+        <label>Alergias o intolerancias <span className="tag">opcional</span>
           <input placeholder="Ej: celiaco, intolerante a la lactosa, sin mariscos" value={restrictions}
             onChange={(e) => setRestrictions(e.target.value)} />
+          <p className="muted small">Este dato se usa para generar el plan de alimentación personalizado.</p>
         </label>
-        <p className="muted small">Este dato se usa para generar el plan de alimentación personalizado.</p>
+      </fieldset>
+
+      <DietaryRoutineFields value={routine} onChange={setRoutine} />
+
+      <fieldset className="card">
+        <legend>Observaciones</legend>
+        <label>Notas generales <span className="tag">opcional</span>
+          <textarea rows={3} placeholder="Cualquier otro dato que no entre en los campos de arriba…"
+            value={observations} onChange={(e) => setObservations(e.target.value)} />
+        </label>
       </fieldset>
 
       {error && <p className="error">{error}</p>}

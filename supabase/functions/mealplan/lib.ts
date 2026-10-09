@@ -12,12 +12,30 @@ export interface PlanItem {
   content: string
 }
 
+export interface DietaryRoutineEntry {
+  time: string | null
+  what: string | null
+}
+
+/** Rutina alimentaria actual del paciente, tal cual se cargó en la ficha (no es el plan que se le va a dar). */
+export interface DietaryRoutineContext {
+  desayuno: DietaryRoutineEntry
+  almuerzo: DietaryRoutineEntry
+  merienda: DietaryRoutineEntry
+  cena: DietaryRoutineEntry
+  anxiety: DietaryRoutineEntry
+}
+
 export interface PatientContext {
   full_name: string
   sex: 'M' | 'F'
   age: number | null
-  height_cm: number
+  height_cm: number | null
   dietary_restrictions: string | null
+  reason_for_visit: string | null
+  medication: string | null
+  observations: string | null
+  dietary_routine: DietaryRoutineContext | null
   /** Última medición, si tiene alguna. */
   measurement: {
     weight_kg: number
@@ -33,6 +51,17 @@ export interface PatientContext {
 
 const MAX_NOTES = 8
 const MAX_NOTE_CHARS = 400
+const ROUTINE_LABEL: Record<keyof DietaryRoutineContext, string> = {
+  desayuno: 'Desayuno', almuerzo: 'Almuerzo', merienda: 'Merienda', cena: 'Cena', anxiety: 'Momentos de ansiedad',
+}
+
+/** Líneas "- Desayuno (08:00): mate con tostadas" para las comidas que tengan algo cargado; [] si no hay nada. */
+function describeRoutine(r: DietaryRoutineContext): string[] {
+  return (Object.keys(ROUTINE_LABEL) as (keyof DietaryRoutineContext)[])
+    .map((key) => ({ key, entry: r[key] }))
+    .filter(({ entry }) => entry?.what)
+    .map(({ key, entry }) => `- ${ROUTINE_LABEL[key]}${entry.time ? ` (${entry.time})` : ''}: ${entry.what}`)
+}
 
 /** El prompt para Gemini, en texto. Es determinístico y no toca la red: se puede snapshot-testear. */
 export function buildPrompt(ctx: PatientContext): string {
@@ -40,7 +69,7 @@ export function buildPrompt(ctx: PatientContext): string {
     'Sos un asistente que arma planes de alimentación semanales para un profesional de nutrición humano, que va a',
     'revisar y editar el resultado antes de dárselo a su paciente. No sos vos quien atiende al paciente.',
     '',
-    `Paciente: ${ctx.full_name}, sexo ${ctx.sex === 'M' ? 'masculino' : 'femenino'}${ctx.age !== null ? `, ${ctx.age} años` : ''}, ${ctx.height_cm} cm.`,
+    `Paciente: ${ctx.full_name}, sexo ${ctx.sex === 'M' ? 'masculino' : 'femenino'}${ctx.age !== null ? `, ${ctx.age} años` : ''}${ctx.height_cm !== null ? `, ${ctx.height_cm} cm` : ''}.`,
   ]
 
   if (ctx.measurement) {
@@ -61,7 +90,15 @@ export function buildPrompt(ctx: PatientContext): string {
       : 'Sin restricciones alimenticias registradas.',
   )
 
+  if (ctx.reason_for_visit) lines.push(`Motivo de la consulta: ${ctx.reason_for_visit}.`)
+  if (ctx.medication) lines.push(`Medicación o suplementos que toma: ${ctx.medication}.`)
+  if (ctx.observations) lines.push(`Observaciones generales: ${ctx.observations}.`)
   if (ctx.goal) lines.push(`Objetivo indicado por el profesional: ${ctx.goal}.`)
+
+  const routine = ctx.dietary_routine ? describeRoutine(ctx.dietary_routine) : []
+  if (routine.length > 0) {
+    lines.push('', 'Rutina alimentaria actual del paciente (es lo que come hoy, no lo que tiene que comer):', ...routine)
+  }
 
   if (ctx.notes.length > 0) {
     lines.push('', 'Anotaciones recientes del profesional sobre este paciente (más nueva primero):')

@@ -22,7 +22,7 @@ function PatientCard({ p }: { p: PatientSummary }) {
           <h3>{p.full_name}</h3>
           <small className="muted">DNI {p.dni}</small>
           <small className="muted">
-            {age !== null ? `${age} años · ` : ''}{p.sex === 'M' ? 'Masc.' : 'Fem.'} · {p.height_cm} cm
+            {age !== null ? `${age} años · ` : ''}{p.sex === 'M' ? 'Masc.' : 'Fem.'}{p.height_cm !== null ? ` · ${p.height_cm} cm` : ''}
           </small>
         </div>
         {p.last_physical_rating !== null && (

@@ -70,29 +70,24 @@ async function generate(req: Request): Promise<Response> {
 
   const { data: patient, error: pErr } = await supabase
     .from('patients')
-    .select('full_name, sex, birth_date, height_cm, dietary_restrictions')
+    .select('full_name, sex, birth_date, height_cm, dietary_restrictions, reason_for_visit, medication, dietary_routine, observations')
     .eq('id', patientId)
     .maybeSingle()
   if (pErr) return json({ error: 'db_error' }, 500)
   if (!patient) return json({ error: 'patient_not_found' }, 404)
 
-  const { data: visits } = await supabase
-    .from('visits')
-    .select('id')
-    .eq('patient_id', patientId)
-    .order('visited_at', { ascending: false })
+  // La visita más reciente puede ser una "simple" sin medición detallada: hay que buscar en todas las visitas
+  // del paciente, no sólo en la última.
+  const { data: m } = await supabase
+    .from('measurements')
+    .select('weight_kg, body_fat_pct, muscle_mass_kg, bmr_kcal, measured_at, visits!inner(patient_id)')
+    .eq('visits.patient_id', patientId)
+    .order('measured_at', { ascending: false })
     .limit(1)
-  let measurement: PatientContext['measurement'] = null
-  if (visits?.[0]) {
-    const { data: m } = await supabase
-      .from('measurements')
-      .select('weight_kg, body_fat_pct, muscle_mass_kg, bmr_kcal')
-      .eq('visit_id', visits[0].id)
-      .order('measured_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (m) measurement = m
-  }
+    .maybeSingle()
+  const measurement: PatientContext['measurement'] = m
+    ? { weight_kg: m.weight_kg, body_fat_pct: m.body_fat_pct, muscle_mass_kg: m.muscle_mass_kg, bmr_kcal: m.bmr_kcal }
+    : null
 
   const { data: notesRows } = await supabase
     .from('patient_notes')
@@ -107,6 +102,10 @@ async function generate(req: Request): Promise<Response> {
     age: ageFrom(patient.birth_date),
     height_cm: patient.height_cm,
     dietary_restrictions: patient.dietary_restrictions,
+    reason_for_visit: patient.reason_for_visit,
+    medication: patient.medication,
+    observations: patient.observations,
+    dietary_routine: patient.dietary_routine,
     measurement,
     notes: (notesRows ?? []).map((n) => n.body as string),
     goal: goal || null,

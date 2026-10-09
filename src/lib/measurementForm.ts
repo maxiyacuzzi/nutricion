@@ -4,9 +4,11 @@ import type { MeasurementKey, MeasurementValues } from '../types'
 export type MeasurementForm = Record<MeasurementKey, string>
 
 export function emptyMeasurementForm(): MeasurementForm {
+  // total_fat_pct no está: quedó sin usar en ningún lado de la app (el dato real es body_fat_pct), así que
+  // dejamos de pedirlo en el formulario. La columna sigue en la base por si algún registro viejo la tiene.
   const keys: MeasurementKey[] = [
     'weight_kg', 'physical_rating', 'bone_mass_kg', 'body_fat_pct', 'body_water_pct', 'muscle_mass_kg',
-    'visceral_fat', 'total_fat_pct', 'fat_trunk_pct', 'fat_left_arm_pct', 'fat_right_arm_pct',
+    'visceral_fat', 'fat_trunk_pct', 'fat_left_arm_pct', 'fat_right_arm_pct',
     'fat_left_leg_pct', 'fat_right_leg_pct', 'muscle_trunk_kg', 'muscle_left_arm_kg', 'muscle_right_arm_kg',
     'muscle_left_leg_kg', 'muscle_right_leg_kg', 'bmr_kcal', 'metabolic_age',
   ]

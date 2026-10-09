@@ -31,11 +31,6 @@ export function MeasurementFields({ form, onChange }: Props) {
               {Array.from({ length: 9 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
             </select>
           </label>
-          <label>
-            Masa ósea (kg)
-            <input inputMode="decimal" placeholder="Ej: 3.2" value={form.bone_mass_kg}
-              onChange={(e) => onChange('bone_mass_kg', e.target.value)} />
-          </label>
         </div>
       </fieldset>
 
